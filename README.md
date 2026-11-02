@@ -20,7 +20,7 @@ A developer, analyst, journalist or community advocate with a simple question �
 
 ## What It Does
 
-Ask a question in plain English. The agent writes and runs SQL against Berkeley Lab's **Queued Up** dataset (about 38,000 interconnection requests across all seven US grid operators plus non-ISO regions, through the end of 2025) and returns:
+Ask a question in plain English. The agent writes and runs SQL against Berkeley Lab's **interconnection queue dataset**, compiled with Interconnection.fyi (about 38,000 interconnection requests across all seven US grid operators plus non-ISO regions, through the end of 2025) and returns:
 
 - **The answer first**, as a single number or a small table
 - **What it counted**, in plain words (e.g., "active requests in the ERCOT region")
@@ -37,7 +37,7 @@ It declines questions the data can't answer (why something happened, predictions
 | --- | --- |
 | Model | gpt-oss-120b (open-source) on Groq |
 | Tools | `list_tables`, `describe_table`, `run_sql` |
-| Data | Berkeley Lab Queued Up (CC BY 4.0) in DuckDB |
+| Data | Berkeley Lab with Interconnection.fyi (CC BY 4.0) in DuckDB |
 | Guardrails (in code, not just the prompt) | Read-only database; single `SELECT` only; 200-row limit; 10-second query timeout; 8 tool steps per question; 20 questions per session |
 | Tracing | Every question, tool call, SQL query, answer and 👍/👎 is logged to Supabase for error analysis |
 | App | Streamlit |
@@ -61,7 +61,7 @@ Before writing any agent code, I explored the data and logged the traps an agent
 
 - **Hybrid storage is mostly missing:** about 79% of solar-plus-battery requests nationally (and every hybrid in ERCOT) don't record a storage size.
 - **ERCOT's active count differs from the published report by +269 requests,** while its capacity matches exactly. I tested five explanations (study stage, project type, timing, size, suspended status) and ruled each out.
-- **Recorded capacity runs ~10% below the report's published totals** in 8 of 9 regions; the report's method isn't fully documented, so the agent labels totals as "recorded capacity."
+- **Recorded capacity runs about 10% below the report nationally (9.5%),** with regional gaps from under 1% (CAISO) to 21% (West); ERCOT matches exactly. The report's method isn't fully documented, so the agent labels totals as "recorded capacity."
 - Smaller traps: negative MW on repowered projects, rows without a queue date, and developer-estimated online dates extending to 2057.
 
 ⚠️ Full traps list: [`journal/traps.md`](journal/traps.md)
@@ -72,7 +72,7 @@ Before writing any agent code, I explored the data and logged the traps an agent
 
 I follow an Analyze → Measure → Improve loop:
 
-1. **Test questions:** 25 questions spanning 8 user types (developers, data center site selectors, investors, utility planners, journalists, advocates), every grid operator, and deliberate traps, ambiguous terms and out-of-scope questions.
+1. **Test questions:** 25 questions spanning 8 user types (developers, data center site selectors, investors, utility planners, journalists, advocates), questions across the major grid operators plus nationwide questions, and deliberate traps, ambiguous terms and out-of-scope questions.
 2. **Error analysis:** I read every trace myself, note the first failure, and group failures into types.
 3. **Fix and measure:** change the prompt, context or code, then rerun the full set and compare.
 
@@ -81,7 +81,7 @@ I follow an Analyze → Measure → Improve loop:
 | Failure | v0 | v1 |
 | --- | --- | --- |
 | Calculation error (model did math outside SQL) | 63.5% (wrong) | 63.4% (correct, computed in SQL) |
-| Technical jargon (column names) in answers | 3 of 5 answers | 2 of 5 |
+| Technical jargon (column names) in answers | 5 of 5 answers | 2 of 5 |
 | Lists shown as run-on text | Yes | Table |
 | "Right now" questions not flagged as historical data | Missed | Flagged |
 | Response time, simple question | 22 s | 5 s |
@@ -104,13 +104,13 @@ I follow an Analyze → Measure → Improve loop:
 
 ## How I Worked with AI
 
-I used Claude Code as my pair programmer. I wrote the product spec, the definitions, and the first sections of the system prompt; verified ground-truth answers against Berkeley Lab's published report; and read and judged every trace. Claude Code wrote the application code, guardrails and tooling.
+I used Claude Code as my pair programmer. I wrote the product spec, the definitions, and the first sections of the system prompt; checked my counts against Berkeley Lab's published regional totals; and read and judged every trace. Claude Code wrote the application code, guardrails and tooling.
 
 ---
 
 ## Data and License
 
-Interconnection queue data: Lawrence Berkeley National Laboratory and GridTracker, *Queued Up: 2026 Edition* data file (through end of 2025), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). [emp.lbl.gov/queues](https://emp.lbl.gov/queues)
+Interconnection queue data: Lawrence Berkeley National Laboratory with Interconnection.fyi, *Interconnection Queue Dataset & Summarized Data Files* (through 2025, May 2026), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). [emp.lbl.gov/queues](https://emp.lbl.gov/queues)
 
 *This tool provides analysis of public data and isn't investment, legal or engineering advice.*
 
