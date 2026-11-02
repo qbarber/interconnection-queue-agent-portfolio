@@ -8,7 +8,8 @@ Built by [Quentin Barber](https://www.linkedin.com/in/quentinbarber/) — produc
 🔄 **Status:** v1 live · improving weekly from real questions · live grid-operator data coming next
 🔒 **Source code:** private — happy to walk through it on request
 
-<!-- Add 1–2 screenshots here: the home screen and an answer card with "How I got this" open. -->
+![Home screen](images/home.png)
+![Answer card with "How I got this" open](images/answer-card.png)
 
 ---
 
