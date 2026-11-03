@@ -4,7 +4,7 @@
 
 Built by [Quentin Barber](https://www.linkedin.com/in/quentinbarber/) — product leader building AI tools for the energy transition.
 
-🌐 **Try it live:** [interconnection-queue-agent-qb.streamlit.app](https://interconnection-queue-agent-qb.streamlit.app/)
+🌐 **Try it live:** [interconnection-queue-agent.streamlit.app](https://interconnection-queue-agent.streamlit.app/)
 🔄 **Status:** v1 live · improving weekly from real questions · live grid-operator data coming next
 🔒 **Source code:** private — happy to walk through it on request
 
