@@ -5,7 +5,7 @@
 Built by [Quentin Barber](https://www.linkedin.com/in/quentinbarber/) — product leader building AI tools for the energy transition.
 
 🌐 **Try it live:** [interconnection-queue-agent.streamlit.app](https://interconnection-queue-agent.streamlit.app/)
-🔄 **Status:** v3 live · 42% → 70% → 87% pass rate across three versions · live grid-operator data coming next
+🔄 **Status:** v3 live · 42% → 66% → 73% pass rate across three versions · live grid-operator data coming next
 🔒 **Source code:** private — happy to walk through it on request
 
 ![Home screen](images/home.png)
@@ -40,7 +40,7 @@ It declines questions the data can't answer (why something happened, predictions
 | Tools | `list_tables`, `describe_table`, `run_sql` |
 | Data | Berkeley Lab with Interconnection.fyi (CC BY 4.0) in DuckDB, plus a per-resource capacity table built at startup (one row per request per resource), so hybrid projects can't be miscounted |
 | Guardrails (in code, not just the prompt) | Read-only database; single `SELECT` only; 200-row limit; 10-second query timeout; 8 tool steps per question; 20 questions per session |
-| Answer checks (code) | Column names or SQL in the answer, a ranking without a table (or a table without numbers), and invented explanations each trigger one rewrite, logged in the trace; at the step limit the agent must answer from what it has found |
+| Answer checks (code) | Column names or SQL in the answer, a ranking without a table (or a table without numbers), invented explanations, and any number that isn't in a query result each trigger one rewrite, logged in the trace; at the step limit the agent must answer from what it has found |
 | Tracing | Every question, tool call, SQL query, answer, check and 👍/👎 is logged to Supabase for error analysis |
 | App | Streamlit |
 
@@ -97,7 +97,7 @@ I follow an Analyze → Measure → Improve loop:
 
 | | v1 | v2 | v3 |
 | --- | --- | --- | --- |
-| **Pass rate (human-reviewed)** | **42%** (11 of 26) | **70%** (35 of 50, two runs) | **87%** (13 of 15)* |
+| **Pass rate (human-reviewed)** | **42%** (11 of 26) | **66%** (33 of 50, two runs) | **73%** (11 of 15)* |
 | No ranking table | 6 | 0 | 0 |
 | Technical jargon in answers | 5 | 3 | 0 |
 | Caveat missing or doesn't fit | 4 | 5 | 0 |
@@ -105,10 +105,10 @@ I follow an Analyze → Measure → Improve loop:
 | Wrong filter or definition | 2 | 8 | 1 |
 | Wrong capacity SQL | 2 | 0 | 0 |
 | Invented cause | 1 | 2 | 0 |
-| Number not from a query | — | — | 1 |
+| Number not from a query | — | 2 | 3 |
 | Median response time (scripted runs) | 35.0 s (free tier) | 2.4 s | 2.3 s |
 
-*v3: the 15 reviewed include every question that failed or flipped in v2, so it's the hard sample. With the AI pre-labels for the other 10, it's 23 of 25 (92%).
+*v3: the 15 reviewed include every question that failed or flipped in v2, so it's the hard sample. With the AI pre-labels for the other 10, it's 21 of 25 (84%). Rates were corrected after the answer validator (below) found 4 failures I had labeled Pass.
 
 **What changed:**
 - **v2:** a per-resource capacity table instead of SQL templates in the prompt, code checks for jargon and missing tables (one rewrite each), required vs optional caveats, and request counts behind every median.
@@ -116,9 +116,10 @@ I follow an Analyze → Measure → Improve loop:
 
 **What v2 and v3 taught me:**
 - The structural fix (the capacity table) eliminated capacity SQL errors, and code checks fixed every missing table. But wrong filters became the top failure: undefined words like "proposed" changed answers by up to 4x.
-- Every fix moved the failures somewhere new: from presentation (v1) to definitions (v2) to naming and arithmetic (v3). The remaining failures get harder to find, which is why reading traces still matters at 87%.
+- Every fix moved the failures somewhere new: from presentation (v1) to definitions (v2) to naming and arithmetic (v3). The remaining failures get harder to find, which is why reading traces still matters at 73%.
 - A prompt rule can lose to a column name: the agent kept reading "proposed" as "has a proposed online date" because the schema has a column called `prop_date`.
 - Blind check of the AI pre-labeler: 3 of 4 agreed, and the one difference was the AI catching a failure I missed.
+- Reading traces isn't enough on its own: an answer validator (every number must come from a query result) found 4 answers I had passed where the model added up or divided numbers itself. They were correct numbers, but not from SQL.
 
 📈 Full changelog: [`journal/iteration-log.md`](journal/iteration-log.md)
 
@@ -126,7 +127,8 @@ I follow an Analyze → Measure → Improve loop:
 
 ## Roadmap
 
-- **v4 (next):** an answer validator (every number in an answer must appear in a query result), a fix for the "proposed" naming trap, and a few formatting rules
+- **v4 (in progress):** the answer validator is built and live; next are a fix for the "proposed" naming trap and a few formatting rules
+- **Invented-cause judge:** an LLM judge measured against my labels (test: 6 of 6 invented causes caught, 43 of 44 clean answers passed, vs 2 of 6 for the keyword check); offline for now
 - **Stability:** v3 was measured on one run; v2 showed 5 of 25 questions flip between runs, so repeated runs come next
 - **Live data:** queue data from all seven major grid operators via [gridstatus](https://github.com/gridstatus/gridstatus), starting with ERCOT and PJM — the two biggest data center markets. Utilities outside the grid operators (Southeast, West) stay on the Berkeley Lab data.
 - **Completion odds:** historical base rates ("How often do projects like this get built?")

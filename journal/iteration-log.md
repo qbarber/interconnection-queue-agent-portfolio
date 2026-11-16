@@ -115,3 +115,37 @@ Scope: prompt v3 (`4f4504d77ded`) with the forced final answer, invented-cause c
 - EA21 keeps adding a proposed-date filter despite v3's rule: the word "proposed" matches the `prop_date` column name, and that match beats the prompt rule. It's a naming problem, not a prompt problem (v4: describe the column differently, or a code check).
 
 **What I learned:** Every fix moved the failures somewhere new: from presentation (v1) to definitions (v2) to naming and arithmetic (v3). The remaining failures get harder to find, which is why reading traces still matters at 87%.
+
+### Judge: invented cause (Nov 15)
+
+Offline LLM judge for one failure type, built the Hamel way: binary pass/fail, measured against my labels before it's trusted. Not wired into the app.
+
+- **Data** (`evals/judges/invented_cause_data.csv`, 124 rows): 104 real labeled traces (3 fails, all EA05) + 20 synthetic (12 fails, 8 hard passes) written by Claude and labeled by me. Split train 25 / dev 49 / test 50; few-shot examples from train only.
+- **Judge:** gpt-oss-120b on Groq, temperature 0, JSON {verdict, reason}; prompt in `evals/judges/invented_cause_prompt.md`.
+- **Dev iterations** (6 fails, 43 passes): run 1 TPR 5/6, TNR 43/43 (missed EA05 v1: "2024's very low count reflects incomplete filing data" read as a caveat) → added "a data limit used to explain a pattern = fail" → TPR 6/6, TNR 42/43 (flagged the data-center scope statement, EA07 v1) → added "dataset-scope statements aren't causes" → 4 runs: TPR 6/6 every time, TNR 43/43 twice and 42/43 twice. Prompt frozen.
+
+**Test (one run, frozen prompt)**
+
+| | TPR (fails caught) | TNR (passes kept) |
+|---|---|---|
+| LLM judge | 6 of 6 (2 real, 4 synthetic) | 43 of 44 |
+| Keyword check (v3) | 2 of 6 (the 2 real; 0 of 4 synthetic) | 44 of 44 |
+
+The judge's one miss on test: synthetic N05 (ERCOT count caveat: "the difference is in counting, not megawatts") flagged as a cause.
+
+**Notes**
+- The dev flip (a hybrid-storage caveat judged fail in 2 of 4 runs on the same prompt) is model randomness at temperature 0, not a prompt gap. If the judge goes live, the design is a majority vote of 3 calls.
+- Most positives are AI-written synthetic examples, and the real ones are all EA05, so performance on new real phrasings isn't proven yet.
+- The keyword check misses every invented cause written without its keywords ("a transition year", "a sign that", "on the back of", or a separate explaining sentence); the judge caught all of them on dev and test.
+
+### Answer validator and corrected v2/v3 results (Nov 16)
+
+Built the answer validator (every number in an answer must come from a query result; code only, one rewrite, logged). Tested offline on all 104 labeled traces by re-running their SQL for full results: it flags EA06 v3 (49.1 GW) and v0 EA04 (63.5%), and fired on 4 answers I had labeled Pass. All 4 were real: the model computed a total or share itself (EA12 v2 2ad35f12 and v3 3d2afd8c: 23.4 GW summed from regions; EA20 v2 b9a690f3: 144 GW summed from resources; EA25 v3 290396c6: 33% = 2,819 / 8,513). **The validator found 4 failures I missed while labeling.** Relabeled as Fail, "number not from query".
+
+**Corrected pass rates** (replaces the earlier v2 and v3 figures)
+- v1 scripted: 11 of 26, 42% (unchanged)
+- v2: 33 of 50, **66%** (was 35 of 50, 70%)
+- v3, my 15 reviewed: 11 of 15, **73%** (was 13 of 15, 87%)
+- v3, all 25 with AI pre-labels for the 10 unreviewed: 21 of 25, **84%** (was 23 of 25, 92%)
+
+**v3 failure types now:** number not from query 3 (EA06, EA12, EA25), wrong filter or definition 1 (EA21). Model arithmetic, not filters, is v3's top failure. v2 gains 2 "number not from query" fails (EA12, EA20).
