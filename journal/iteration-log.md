@@ -114,7 +114,7 @@ Scope: prompt v3 (`4f4504d77ded`) with the forced final answer, invented-cause c
 - v2's bad example never contained "incomplete filing data"; the model produced it on its own.
 - EA21 keeps adding a proposed-date filter despite v3's rule: the word "proposed" matches the `prop_date` column name, and that match beats the prompt rule. It's a naming problem, not a prompt problem (v4: describe the column differently, or a code check).
 
-**What I learned:** Every fix moved the failures somewhere new: from presentation (v1) to definitions (v2) to naming and arithmetic (v3). The remaining failures get harder to find, which is why reading traces still matters at 87%.
+**What I learned:** Every fix moved the failures somewhere new: from presentation (v1) to definitions (v2) to naming and arithmetic (v3). The remaining failures get harder to find, which is why reading traces still matters at 73%.
 
 ### Judge: invented cause (Nov 15)
 
