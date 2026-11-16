@@ -5,7 +5,7 @@
 Built by [Quentin Barber](https://www.linkedin.com/in/quentinbarber/) — product leader building AI tools for the energy transition.
 
 🌐 **Try it live:** [interconnection-queue-agent.streamlit.app](https://interconnection-queue-agent.streamlit.app/)
-🔄 **Status:** v1 live · improving weekly from real questions · live grid-operator data coming next
+🔄 **Status:** v3 live · 42% → 70% → 87% pass rate across three versions · live grid-operator data coming next
 🔒 **Source code:** private — happy to walk through it on request
 
 ![Home screen](images/home.png)
@@ -38,9 +38,10 @@ It declines questions the data can't answer (why something happened, predictions
 | --- | --- |
 | Model | gpt-oss-120b (open-source) on Groq |
 | Tools | `list_tables`, `describe_table`, `run_sql` |
-| Data | Berkeley Lab with Interconnection.fyi (CC BY 4.0) in DuckDB |
+| Data | Berkeley Lab with Interconnection.fyi (CC BY 4.0) in DuckDB, plus a per-resource capacity table built at startup (one row per request per resource), so hybrid projects can't be miscounted |
 | Guardrails (in code, not just the prompt) | Read-only database; single `SELECT` only; 200-row limit; 10-second query timeout; 8 tool steps per question; 20 questions per session |
-| Tracing | Every question, tool call, SQL query, answer and 👍/👎 is logged to Supabase for error analysis |
+| Answer checks (code) | Column names or SQL in the answer, a ranking without a table (or a table without numbers), and invented explanations each trigger one rewrite, logged in the trace; at the step limit the agent must answer from what it has found |
+| Tracing | Every question, tool call, SQL query, answer, check and 👍/👎 is logged to Supabase for error analysis |
 | App | Streamlit |
 
 ---
@@ -74,7 +75,7 @@ Before writing any agent code, I explored the data and logged the traps an agent
 I follow an Analyze → Measure → Improve loop:
 
 1. **Test questions:** 25 questions spanning 8 user types (developers, data center site selectors, investors, utility planners, journalists, advocates), questions across the major grid operators plus nationwide questions, and deliberate traps, ambiguous terms and out-of-scope questions.
-2. **Error analysis:** I read every trace myself, note the first failure, and group failures into types.
+2. **Error analysis:** I read traces myself, note the first failure, and group failures into types. An AI pre-labeler suggests labels; I review every failure plus a blind sample with the suggestion hidden.
 3. **Fix and measure:** change the prompt, context or code, then rerun the full set and compare.
 
 ### v0 → v1
@@ -92,20 +93,48 @@ I follow an Analyze → Measure → Improve loop:
 - Fixing one rule can break another: asking for "only relevant caveats" dropped a caveat that should have stayed.
 - The most dangerous new failure: the agent flagged an anomaly correctly but **invented a cause** for it. Preventing unsupported explanations is the top priority for v2.
 
+### v1 → v2 → v3
+
+| | v1 | v2 | v3 |
+| --- | --- | --- | --- |
+| **Pass rate (human-reviewed)** | **42%** (11 of 26) | **70%** (35 of 50, two runs) | **87%** (13 of 15)* |
+| No ranking table | 6 | 0 | 0 |
+| Technical jargon in answers | 5 | 3 | 0 |
+| Caveat missing or doesn't fit | 4 | 5 | 0 |
+| Method described wrong | 3 | 0 | 0 |
+| Wrong filter or definition | 2 | 8 | 1 |
+| Wrong capacity SQL | 2 | 0 | 0 |
+| Invented cause | 1 | 2 | 0 |
+| Number not from a query | — | — | 1 |
+| Median response time (scripted runs) | 35.0 s (free tier) | 2.4 s | 2.3 s |
+
+*v3: the 15 reviewed include every question that failed or flipped in v2, so it's the hard sample. With the AI pre-labels for the other 10, it's 23 of 25 (92%).
+
+**What changed:**
+- **v2:** a per-resource capacity table instead of SQL templates in the prompt, code checks for jargon and missing tables (one rewrite each), required vs optional caveats, and request counts behind every median.
+- **v3:** "proposed" and "waiting" mean active requests, event dates for "withdrawn in 2025", coverage stated before ranking sparse fields, an invented-cause check, a forced final answer at the step limit, and stricter jargon and table checks.
+
+**What v2 and v3 taught me:**
+- The structural fix (the capacity table) eliminated capacity SQL errors, and code checks fixed every missing table. But wrong filters became the top failure: undefined words like "proposed" changed answers by up to 4x.
+- Every fix moved the failures somewhere new: from presentation (v1) to definitions (v2) to naming and arithmetic (v3). The remaining failures get harder to find, which is why reading traces still matters at 87%.
+- A prompt rule can lose to a column name: the agent kept reading "proposed" as "has a proposed online date" because the schema has a column called `prop_date`.
+- Blind check of the AI pre-labeler: 3 of 4 agreed, and the one difference was the AI catching a failure I missed.
+
 📈 Full changelog: [`journal/iteration-log.md`](journal/iteration-log.md)
 
 ---
 
 ## Roadmap
 
-- **v2 (next):** code evals for jargon leakage and invented explanations; required capacity caveats; faster responses
+- **v4 (next):** an answer validator (every number in an answer must appear in a query result), a fix for the "proposed" naming trap, and a few formatting rules
+- **Stability:** v3 was measured on one run; v2 showed 5 of 25 questions flip between runs, so repeated runs come next
 - **Live data:** queue data from all seven major grid operators via [gridstatus](https://github.com/gridstatus/gridstatus), starting with ERCOT and PJM — the two biggest data center markets. Utilities outside the grid operators (Southeast, West) stay on the Berkeley Lab data.
 - **Completion odds:** historical base rates ("How often do projects like this get built?")
 - **Real-user evals:** every 👎 and every new question type from visitors goes into the next round
 
 ## How I Worked with AI
 
-I used Claude Code as my pair programmer. I wrote the product spec, the definitions, and the first sections of the system prompt; checked my counts against Berkeley Lab's published regional totals; and read and judged every trace. Claude Code wrote the application code, guardrails and tooling.
+I used Claude Code as my pair programmer. I wrote the product spec, the definitions, and the first sections of the system prompt; checked my counts against Berkeley Lab's published regional totals; and labeled the traces, using Claude as a pre-labeler that I checked blind. Claude Code wrote the application code, guardrails and tooling.
 
 ---
 
