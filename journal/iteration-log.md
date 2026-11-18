@@ -149,3 +149,48 @@ Built the answer validator (every number in an answer must come from a query res
 - v3, all 25 with AI pre-labels for the 10 unreviewed: 21 of 25, **84%** (was 23 of 25, 92%)
 
 **v3 failure types now:** number not from query 3 (EA06, EA12, EA25), wrong filter or definition 1 (EA21). Model arithmetic, not filters, is v3's top failure. v2 gains 2 "number not from query" fails (EA12, EA20).
+
+### v4 / v4.1: latest ERCOT report as a second source (Nov 16–17)
+
+**Scope.** The latest monthly ERCOT GIS Report (October 2026) is loaded as `ercot_report` and `ercot_cancelled`.
+- It answers ERCOT questions that have a time word (now, current, today, latest, right now).
+- The snapshot stays the source for history, other regions, and ERCOT questions without a time word.
+- Answers name it "Latest ERCOT report (Month Year)", never "live".
+- ERCOT statuses map to my definitions: approved for synchronization stays active (flagged), and Inactive Projects = suspended.
+- v4 (`50922018f15e`) failed B06 and dropped offers. v4.1 (`31e1fc450296`) adds the "since / compared to the end of 2025" rule.
+
+**Moved into code (v4.1)**
+- `sources_used` is logged per trace (snapshot / ercot_report / both / none).
+- ERCOT count caveat ("about 269 higher than published"): added on snapshot ERCOT active counts, removed from answers that use only the ERCOT report.
+- Offer of the latest ERCOT report: appended to ERCOT/Texas snapshot answers with no time, change or history words.
+- Monthly refresh (GitHub Action), validated before writing:
+  - required columns are present
+  - study-phase, model-ready and cancellation counts match the report's Summary sheet
+  - cancelled MW is within 0.5 MW
+  - the active count is within 30% of last month
+
+  If any check fails, it writes nothing and the workflow fails.
+
+**Clean run** (current code; 8 behavior questions × 2, 25 snapshot questions × 1). AI pre-labeled. I reviewed and confirmed every Fail (6 of 6), plus 4 Passes.
+
+| | Pass | Right source (code eval) |
+|---|---|---|
+| Snapshot questions | 22 of 25 (88%) | 24 of 25 |
+| Behavior questions | 13 of 16 (81%) | 15 of 16 |
+
+**Fails**
+- **B06 run 1:** the 45.6 GW difference is right, but a caveat compares request counts across sources, in the wrong direction. Wrong data source, caveat doesn't fit.
+- **B06 run 2:** declined, claiming the ERCOT report also stops at the end of 2025. Wrong data source.
+- **EA11:** ERCOT from the report (energization date), PJM from the snapshot. Wrong data source.
+- **B01 run 1:** describes "active" as "signed agreement but not yet operational". Method described wrong.
+- **EA05:** the jargon rewrite turned the year table into a sentence, and the table check still fired after it. No ranking table.
+- **EA07:** a project-name search reported "10 data-center requests", which are generation projects named after data centers. Wrong filter or definition.
+
+**Code rules**
+- Count caveat: added 3 times, removed 3 times (B04, B08 × 2).
+- Offers: 8 appended, none misplaced.
+- Validator: caught 3 numbers the model computed itself (EA12, EA16, EA20). All 3 rewrites fixed them.
+- Checks fired on 23 of 41 first answers. Only EA05 still failed after its rewrite.
+- EA21 had no proposed-date filter for the first time (271).
+
+**Key finding:** every rule enforced in code worked every time; every remaining failure was a rule that lived only in the prompt. Next: move source choice into code.

@@ -5,7 +5,7 @@
 Built by [Quentin Barber](https://www.linkedin.com/in/quentinbarber/) — product leader building AI tools for the energy transition.
 
 🌐 **Try it live:** [interconnection-queue-agent.streamlit.app](https://interconnection-queue-agent.streamlit.app/)
-🔄 **Status:** v3 live · 42% → 66% → 73% pass rate across three versions · live grid-operator data coming next
+🔄 **Status:** v4.1 live · 42% → 66% → 73% pass rate across v1–v3 · ERCOT questions about "right now" use the latest monthly ERCOT report
 🔒 **Source code:** private — happy to walk through it on request
 
 ![Home screen](images/home.png)
@@ -28,6 +28,8 @@ Ask a question in plain English. The agent writes and runs SQL against Berkeley 
 - **Caveats** when the data has a known limit that affects the answer
 - **How I got this**: the SQL and steps, so anyone can check the work
 
+For ERCOT questions about what's in the queue *now*, it uses ERCOT's own latest monthly interconnection report instead, and says which source and date it used.
+
 It declines questions the data can't answer (why something happened, predictions, prices) and suggests the closest question it *can* answer.
 
 ---
@@ -38,9 +40,9 @@ It declines questions the data can't answer (why something happened, predictions
 | --- | --- |
 | Model | gpt-oss-120b (open-source) on Groq |
 | Tools | `list_tables`, `describe_table`, `run_sql` |
-| Data | Berkeley Lab with Interconnection.fyi (CC BY 4.0) in DuckDB, plus a per-resource capacity table built at startup (one row per request per resource), so hybrid projects can't be miscounted |
+| Data | Berkeley Lab with Interconnection.fyi (CC BY 4.0) in DuckDB, plus a per-resource capacity table built at startup (one row per request per resource), so hybrid projects can't be miscounted; plus the latest monthly ERCOT interconnection report, refreshed when ERCOT publishes and validated against the report's own Summary sheet before going live |
 | Guardrails (in code, not just the prompt) | Read-only database; single `SELECT` only; 200-row limit; 10-second query timeout; 8 tool steps per question; 20 questions per session |
-| Answer checks (code) | Column names or SQL in the answer, a ranking without a table (or a table without numbers), invented explanations, and any number that isn't in a query result each trigger one rewrite, logged in the trace; at the step limit the agent must answer from what it has found |
+| Answer checks (code) | Column names or SQL in the answer, a ranking without a table (or a table without numbers), invented explanations, and any number that isn't in a query result each trigger one rewrite, logged in the trace; at the step limit the agent must answer from what it has found. Source rules in code: the ERCOT count caveat is added or removed by code, and the offer of the latest ERCOT report is appended by code |
 | Tracing | Every question, tool call, SQL query, answer, check and 👍/👎 is logged to Supabase for error analysis |
 | App | Streamlit |
 
@@ -121,28 +123,47 @@ I follow an Analyze → Measure → Improve loop:
 - Blind check of the AI pre-labeler: 3 of 4 agreed, and the one difference was the AI catching a failure I missed.
 - Reading traces isn't enough on its own: an answer validator (every number must come from a query result) found 4 answers I had passed where the model added up or divided numbers itself. They were correct numbers, but not from SQL.
 
+### v4.1: a second data source
+
+v4 adds the latest monthly ERCOT interconnection report as a second source, for questions about the queue right now. The snapshot stays the source for history and every other region. The report is never called "live": answers name it as "Latest ERCOT report (Month Year)". ERCOT's statuses are mapped to my definitions (a signed agreement is still active; ERCOT's "inactive" is suspended), and the monthly refresh is validated against ERCOT's own Summary sheet before it goes live.
+
+| v4.1 clean run | Result |
+| --- | --- |
+| Snapshot questions (25) | **22 of 25 (88%)** |
+| Behavior questions (8 questions × 2 runs) | **13 of 16 (81%)** |
+| Right data source, by code eval | **39 of 41** |
+
+AI pre-labeled, with every Fail reviewed by me.
+
+**Two automated reviewers, measured against my labels:**
+- **LLM judge for invented causes:** caught 6 of 6 invented causes on a held-out test set, vs 2 of 6 for a keyword check. Offline for now.
+- **Answer validator:** every number in an answer must come from a query result. It found 4 failures I had missed while labeling (correct totals the model added up itself), which lowered my v2 and v3 scores. I corrected them openly above.
+
+**Key finding:** in the clean run, every rule enforced in code worked every time; every remaining failure was a rule that lived only in the prompt (source choice, a data-center name search, a table lost in a rewrite). Next: move source choice into code.
+
 📈 Full changelog: [`journal/iteration-log.md`](journal/iteration-log.md)
 
 ---
 
 ## Roadmap
 
-- **v4 (in progress):** the answer validator is built and live; next are a fix for the "proposed" naming trap and a few formatting rules
-- **Invented-cause judge:** an LLM judge measured against my labels (test: 6 of 6 invented causes caught, 43 of 44 clean answers passed, vs 2 of 6 for the keyword check); offline for now
-- **Stability:** v3 was measured on one run; v2 showed 5 of 25 questions flip between runs, so repeated runs come next
-- **Live data:** queue data from all seven major grid operators via [gridstatus](https://github.com/gridstatus/gridstatus), starting with ERCOT and PJM — the two biggest data center markets. Utilities outside the grid operators (Southeast, West) stay on the Berkeley Lab data.
+- **Source choice in code:** the rule that still fails sometimes (which source to use) moves from the prompt into code
+- **More grid operators:** after a feasibility check of each operator's public queue data, starting with PJM. Utilities outside the grid operators (Southeast, West) stay on the Berkeley Lab data.
+- **Live reviewer:** run the invented-cause judge on live answers only if invented causes reappear
 - **Completion odds:** historical base rates ("How often do projects like this get built?")
 - **Real-user evals:** every 👎 and every new question type from visitors goes into the next round
 
 ## How I Worked with AI
 
-I used Claude Code as my pair programmer. I wrote the product spec, the definitions, and the first sections of the system prompt; checked my counts against Berkeley Lab's published regional totals; and labeled the traces, using Claude as a pre-labeler that I checked blind. Claude Code wrote the application code, guardrails and tooling.
+I used Claude Code as my pair programmer. I wrote the product spec, the definitions, and the first sections of the system prompt; checked my counts against Berkeley Lab's published regional totals; and labeled the traces: by hand for v1–v3, with Claude as a pre-labeler that I checked blind, and for v4.1 with Claude pre-labeling and me reviewing every Fail. I also chose the second data source and how its statuses map to my definitions. Claude Code wrote the application code, guardrails and tooling.
 
 ---
 
 ## Data and License
 
 Interconnection queue data: Lawrence Berkeley National Laboratory with Interconnection.fyi, *Interconnection Queue Dataset & Summarized Data Files* (through 2025, May 2026), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). [emp.lbl.gov/queues](https://emp.lbl.gov/queues)
+
+ERCOT data: ERCOT's public monthly Generator Interconnection Status (GIS) Report and Co-located Battery Identification Report, from ERCOT's Market Information System.
 
 *This tool provides analysis of public data and isn't investment, legal or engineering advice.*
 
